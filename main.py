@@ -59,22 +59,48 @@ def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
     title_bbox = draw.textbbox((x_start, y_pos), tituloProva.upper(), font=font_bold)
     y_pos += (title_bbox[3] - title_bbox[1]) + 30
 
-    # Adiciona campos do Aluno (substitui o antigo bloco de instruções do topo)
-    field_font = ImageFont.load_default()  # Fonte menor
-    line_y = y_pos + 10
-    field_text_y = line_y - 2  # Ajuste para alinhar texto e linha
+    # Adiciona campos do Aluno (Layout Flexível)
+    try:
+        # Tenta usar uma fonte um pouco maior para os campos
+        field_font = ImageFont.truetype("LiberationSans-Regular.ttf", size=16)
+    except Exception:
+        field_font = ImageFont.load_default()
 
-    # Nome
-    draw.text((x_start, field_text_y), "Nome:", fill="black", font=field_font)
-    draw.line([(x_start + 45, line_y + 15), (x_start + 400, line_y + 15)], fill="black", width=1)
+    line_y = y_pos + 20  # Posição Y das linhas
+    field_text_y = y_pos + 5  # Posição Y dos rótulos
 
-    # Número
-    draw.text((x_start + 420, field_text_y), "Número:", fill="black", font=field_font)
-    draw.line([(x_start + 475, line_y + 15), (x_start + 550, line_y + 15)], fill="black", width=1)
+    # Largura útil da página (largura total - 2x a margem esquerda)
+    usable_page_width = page_width - (2 * x_start)
 
-    # Turma
-    draw.text((x_start + 570, field_text_y), "Turma:", fill="black", font=field_font)
-    draw.line([(x_start + 615, line_y + 15), (x_start + 750, line_y + 15)], fill="black", width=1)
+    # --- Campo Nome ---
+    x_nome = x_start
+    label_nome = "Nome:"
+    label_nome_width = draw.textlength(label_nome, font=field_font)
+    line_nome_start = x_nome + label_nome_width + 10
+    line_nome_end = x_nome + (usable_page_width * 0.55)  # 55% da largura
+
+    draw.text((x_nome, field_text_y), label_nome, fill="black", font=field_font)
+    draw.line([(line_nome_start, line_y), (line_nome_end, line_y)], fill="black", width=1)
+
+    # --- Campo Matrícula ---
+    x_matricula = line_nome_end + 20  # 20px de espaço
+    label_matricula = "Matrícula:"  # ATUALIZADO
+    label_matricula_width = draw.textlength(label_matricula, font=field_font)
+    line_matricula_start = x_matricula + label_matricula_width + 10
+    line_matricula_end = x_matricula + (usable_page_width * 0.25)  # 25% da largura
+
+    draw.text((x_matricula, field_text_y), label_matricula, fill="black", font=field_font)
+    draw.line([(line_matricula_start, line_y), (line_matricula_end, line_y)], fill="black", width=1)
+
+    # --- Campo Turma ---
+    x_turma = line_matricula_end + 20
+    label_turma = "Turma:"
+    label_turma_width = draw.textlength(label_turma, font=field_font)
+    line_turma_start = x_turma + label_turma_width + 10
+    line_turma_end = page_width - x_start  # Vai até a margem direita
+
+    draw.text((x_turma, field_text_y), label_turma, fill="black", font=field_font)
+    draw.line([(line_turma_start, line_y), (line_turma_end, line_y)], fill="black", width=1)
 
     y_pos += 60  # Espaço extra para os campos
 
