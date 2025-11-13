@@ -54,15 +54,18 @@ def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
     x_start = margin
     y_pos = margin
 
-    # Título
-    draw.text((x_start, y_pos), tituloProva.upper(), fill="black", font=font_bold)
-    title_bbox = draw.textbbox((x_start, y_pos), tituloProva.upper(), font=font_bold)
+    # Título (centralizado)
+    title_text = tituloProva.upper()
+    title_width = draw.textlength(title_text, font=font_bold)
+    x_title_pos = (page_width - title_width) / 2
+    draw.text((x_title_pos, y_pos), title_text, fill="black", font=font_bold)
+    title_bbox = draw.textbbox((x_title_pos, y_pos), title_text, font=font_bold)
     y_pos += (title_bbox[3] - title_bbox[1]) + 30
 
     # Adiciona campos do Aluno (Layout Flexível)
     try:
         # Tenta usar uma fonte um pouco maior para os campos
-        field_font = ImageFont.truetype("LiberationSans-Regular.ttf", size=16)
+        field_font = ImageFont.truetype("LiberationSans-Regular.ttf", size=18)
     except Exception:
         field_font = ImageFont.load_default()
 
@@ -138,19 +141,16 @@ def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
             start_options_x = x_start + 100
             y_pos = margin + 40
 
-    # Instruções no rodapé (antes do rodapé simples)
+    # Instruções no rodapé
     y_instructions = page_height - 140  # Posição do rodapé de instruções
     draw.text((x_start, y_instructions), "Instruções:", fill="black", font=font_bold)
     y_instructions += 30
     draw.text((x_start, y_instructions), "• Pinte completamente o círculo da resposta.", fill="black", font=font)
     y_instructions += 25
     draw.text((x_start, y_instructions), "• Assinale apenas uma opção por questão.", fill="black", font=font)
-
-    # Rodapé simples
-    footer_text = "Gerado automaticamente - Testify"
-    footer_bbox = draw.textbbox((0,0), footer_text, font=font_small)
-    footer_w = footer_bbox[2] - footer_bbox[0]
-    draw.text(((page_width - footer_w)/2, page_height - margin - 30), footer_text, fill="#555", font=font_small)
+    # Posição correta do rodapé: 30px abaixo da última instrução
+    y_pos_footer = y_instructions + 30
+    draw.text((x_start, y_pos_footer), "Gerado automaticamente - Testify", fill="#AAAAAA", font=font)
     return img
 
 
