@@ -9,162 +9,123 @@ import math
 import io
 import os # Para checar a existência de fontes
 
-# --- Função generate_fixed_gabarito_png (REVISÃO 8 - Layout Minimalista Refinado) ---
-def generate_fixed_gabarito_png(
-    num_questions=50,
-    choices=("A", "B", "C", "D", "E"),
-    title="GABARITO",
-    subtitle="Nome: ___ Numero: ___ Turma: ___", # Apenas referência
-    font_path=None # Ex: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-):
-    # --- Configurações de Layout ---
+# --- Novo fallback: gerar gabarito em branco (layout de bolhas) ---
+def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
+    """Gera imagem de gabarito no novo layout de bolhas, totalmente em branco.
+
+    Entradas:
+    - tituloProva: título no topo do gabarito
+    - numQuestoes: quantidade de questões a desenhar
+
+    Saída: PIL.Image com o gabarito desenhado sem respostas preenchidas.
+    """
+    options = ['A', 'B', 'C', 'D', 'E']
+
     page_width = 1240
     page_height = 1754
-    margin = 60 # Aumentei a margem geral
-    line_color = (210, 210, 210) # Cinza um pouco mais claro
-    text_color = (30, 30, 30)     # Cinza bem escuro (quase preto)
-    label_color = (100, 100, 100) # Cinza médio para rótulos
-    header_spacing = 20 # Espaço vertical no cabeçalho
-    footer_height = 60
-    num_columns = 5
-    bubble_diameter = 28
-    bubble_padding_h = 12
-    bubble_spacing_h = bubble_diameter + bubble_padding_h
-    question_num_padding = 18 # Aumentei um pouco
-    row_padding_y = 22       # Aumentei um pouco
+    margin = 80
+    line_spacing = 60
+    circle_radius = 20
+    circle_padding = 40  # Espaço entre círculos
 
-    # --- Carregar Fontes ---
+    # Tenta encontrar um caminho de fonte válido (mesma heurística do endpoint)
+    font_path = None
+    possible_fonts = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    for f in possible_fonts:
+        if os.path.exists(f):
+            font_path = f
+            break
+
     try:
-        # Ajustei tamanhos para melhor hierarquia
-        title_font_size = 36
-        label_font_size = 18
-        q_font_size = 20
-        choice_font_size = 14
-        footer_font_size = 14
-
-        title_font = ImageFont.truetype(font_path, title_font_size) if font_path else ImageFont.load_default()
-        label_font = ImageFont.truetype(font_path, label_font_size) if font_path else ImageFont.load_default()
-        q_font = ImageFont.truetype(font_path, q_font_size) if font_path else ImageFont.load_default()
-        choice_font = ImageFont.truetype(font_path, choice_font_size) if font_path else ImageFont.load_default()
-        footer_font = ImageFont.truetype(font_path, footer_font_size) if font_path else ImageFont.load_default()
+        font_bold = ImageFont.truetype(font_path, 26) if font_path else ImageFont.load_default()
+        font = ImageFont.truetype(font_path, 22) if font_path else ImageFont.load_default()
+        font_small = ImageFont.truetype(font_path, 18) if font_path else ImageFont.load_default()
     except Exception:
-        print("Aviso: Fonte TTF não encontrada. Usando fontes padrão.")
-        # Usar fontes padrão se TTF falhar
-        title_font = ImageFont.load_default()
-        label_font = ImageFont.load_default()
-        q_font = ImageFont.load_default()
-        choice_font = ImageFont.load_default()
-        footer_font = ImageFont.load_default()
+        font_bold = ImageFont.load_default()
+        font = ImageFont.load_default()
+        font_small = ImageFont.load_default()
 
-    # --- Criar Imagem ---
     img = Image.new("RGB", (page_width, page_height), "white")
     draw = ImageDraw.Draw(img)
 
-    # --- Desenhar Cabeçalho ---
-    current_y = margin
-    # 1. Título (Alinhado à esquerda)
-    draw.text((margin, current_y), title.upper(), font=title_font, fill=text_color)
-    title_bbox = draw.textbbox((margin, current_y), title.upper(), font=title_font)
-    current_y += (title_bbox[3] - title_bbox[1]) + header_spacing * 1.5 # Mais espaço após título
+    x_start = margin
+    y_pos = margin
 
-    # 2. Seção de Informações do Aluno (Layout Refinado)
-    info_section_start_y = current_y
-    line_length_nome = 400 # Linha maior para nome
-    line_length_num_turma = 150 # Linhas menores
-    field_spacing = 40 # Espaço entre campos (Nome | Número | Turma)
+    # Título
+    draw.text((x_start, y_pos), tituloProva.upper(), fill="black", font=font_bold)
+    title_bbox = draw.textbbox((x_start, y_pos), tituloProva.upper(), font=font_bold)
+    y_pos += (title_bbox[3] - title_bbox[1]) + 30
 
-    # Função auxiliar para desenhar campo (Label + Linha)
-    def draw_info_field(x, y, label_text, line_len):
-        label_bbox = draw.textbbox((x, y), label_text, font=label_font)
-        label_w = label_bbox[2] - label_bbox[0]
-        label_h = label_bbox[3] - label_bbox[1]
-        draw.text((x, y), label_text, font=label_font, fill=label_color)
-        line_start_x = x + label_w + 8 # Linha começa pouco depois do label
-        line_y_pos = y + label_h * 0.7 # Alinha a linha verticalmente com o texto
-        draw.line([(line_start_x, line_y_pos), (line_start_x + line_len, line_y_pos)], fill=line_color, width=1)
-        return x + label_w + 8 + line_len # Retorna a posição X final do campo desenhado
+    # Adiciona campos do Aluno (substitui o antigo bloco de instruções do topo)
+    field_font = ImageFont.load_default()  # Fonte menor
+    line_y = y_pos + 10
+    field_text_y = line_y - 2  # Ajuste para alinhar texto e linha
 
-    # Desenha os campos sequencialmente
-    last_x = draw_info_field(margin, info_section_start_y, "Nome:", line_length_nome)
-    last_x = draw_info_field(last_x + field_spacing, info_section_start_y, "Número:", line_length_num_turma)
-    draw_info_field(last_x + field_spacing, info_section_start_y, "Turma:", line_length_num_turma)
+    # Nome
+    draw.text((x_start, field_text_y), "Nome:", fill="black", font=field_font)
+    draw.line([(x_start + 45, line_y + 15), (x_start + 400, line_y + 15)], fill="black", width=1)
 
-    # Linha divisória
-    label_bbox_generic = draw.textbbox((0,0),"Nome:",font=label_font) # Pega altura de um label
-    current_y = info_section_start_y + (label_bbox_generic[3]-label_bbox_generic[1]) + header_spacing
-    draw.line([(margin, current_y), (page_width - margin, current_y)], fill=line_color, width=1)
-    current_y += header_spacing * 1.5 # Mais espaço antes das questões
+    # Número
+    draw.text((x_start + 420, field_text_y), "Número:", fill="black", font=field_font)
+    draw.line([(x_start + 475, line_y + 15), (x_start + 550, line_y + 15)], fill="black", width=1)
 
-    # --- Calcular Área Útil e Colunas ---
-    content_area_y_start = current_y
-    content_area_y_end = page_height - margin - footer_height
-    usable_width = page_width - 2 * margin
-    usable_height = content_area_y_end - content_area_y_start
-    estimated_row_draw_height = bubble_diameter + row_padding_y
-    max_rows_per_col = max(1, int(usable_height // estimated_row_draw_height))
-    if num_questions <= 0: num_questions = 1
-    num_columns = math.ceil(num_questions / max_rows_per_col)
-    col_width = usable_width / num_columns
+    # Turma
+    draw.text((x_start + 570, field_text_y), "Turma:", fill="black", font=field_font)
+    draw.line([(x_start + 615, line_y + 15), (x_start + 750, line_y + 15)], fill="black", width=1)
 
-    # --- Desenhar Questões ---
-    q = 1
-    for col in range(num_columns):
-        col_start_x = margin + col * col_width
+    y_pos += 60  # Espaço extra para os campos
 
-        max_q_num_text = f"{num_questions:02d}."
-        max_q_num_bbox = draw.textbbox((0,0), max_q_num_text, font=q_font)
-        max_q_num_width = max_q_num_bbox[2] - max_q_num_bbox[0]
-        # Posição X final do número (para alinhar à direita antes das bolhas)
-        q_num_x_end = col_start_x + max_q_num_width + 10 # Adiciona padding
-        bubbles_start_x = q_num_x_end + question_num_padding # Início das bolhas
+    # Desenho das questões (sempre círculos vazios)
+    start_options_x = x_start + 100  # Onde as bolhas começam (depois do número)
+    for i in range(numQuestoes):
+        # Número da questão
+        question_num_text = f"{i+1:02}."
+        draw.text((x_start, y_pos), question_num_text, fill="black", font=font_bold)
 
-        for row in range(max_rows_per_col):
-            if q > num_questions: break
+        # 5 opções vazias
+        for j, option_text in enumerate(options):
+            circle_x = start_options_x + (j * (circle_radius * 2 + circle_padding))
+            box = [
+                (circle_x - circle_radius, y_pos - circle_radius),
+                (circle_x + circle_radius, y_pos + circle_radius)
+            ]
 
-            draw_center_y = content_area_y_start + row * estimated_row_draw_height + estimated_row_draw_height / 2
+            # Texto centralizado dentro do círculo
+            bbox = font.getbbox(option_text)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            text_x = circle_x - (text_w / 2)
+            text_y = y_pos - (text_h / 2) - 2
 
-            # Desenhar número da questão
-            q_num_text = f"{q:02d}."
-            q_num_bbox = draw.textbbox((0,0), q_num_text, font=q_font)
-            q_num_width = q_num_bbox[2] - q_num_bbox[0]
-            q_num_height = q_num_bbox[3] - q_num_bbox[1]
-            q_num_x = q_num_x_end - q_num_width # Alinha à direita
-            q_num_y = draw_center_y - q_num_height / 2 # Centraliza vertical
-            draw.text((q_num_x, q_num_y), q_num_text, font=q_font, fill=text_color)
+            # Sempre desenha o círculo vazio
+            draw.ellipse(box, fill="white", outline="black", width=2)
+            draw.text((text_x, text_y), option_text, fill="black", font=font)
 
-            # Desenhar bolhas e letras
-            for i, choice in enumerate(choices):
-                bubble_center_x = bubbles_start_x + i * bubble_spacing_h + bubble_diameter / 2
-                bubble_center_y = draw_center_y
-                x0 = bubble_center_x - bubble_diameter / 2
-                y0 = bubble_center_y - bubble_diameter / 2
-                x1 = bubble_center_x + bubble_diameter / 2
-                y1 = bubble_center_y + bubble_diameter / 2
-                draw.ellipse([x0, y0, x1, y1], outline=line_color, width=1) # Bolha cinza claro
+        y_pos += line_spacing
 
-                choice_bbox = draw.textbbox((0,0), choice, font=choice_font)
-                choice_w = choice_bbox[2] - choice_bbox[0]
-                choice_h = choice_bbox[3] - choice_bbox[1]
-                vertical_adjust = bubble_diameter * 0.05 # Ajuste vertical letra na bolha
-                tx = bubble_center_x - choice_w / 2
-                ty = bubble_center_y - choice_h / 2 - vertical_adjust
-                draw.text((tx, ty), choice, font=choice_font, fill=text_color)
+        # Wrap para nova coluna simples quando necessário
+        if y_pos + line_spacing > page_height - margin:
+            x_start += (page_width // 2)
+            start_options_x = x_start + 100
+            y_pos = margin + 40
 
-            q += 1
+    # Instruções no rodapé (antes do rodapé simples)
+    y_instructions = page_height - 140  # Posição do rodapé de instruções
+    draw.text((x_start, y_instructions), "Instruções:", fill="black", font=font_bold)
+    y_instructions += 30
+    draw.text((x_start, y_instructions), "• Pinte completamente o círculo da resposta.", fill="black", font=font)
+    y_instructions += 25
+    draw.text((x_start, y_instructions), "• Assinale apenas uma opção por questão.", fill="black", font=font)
 
-        if q > num_questions: break
-
-    # --- Desenhar Rodapé (Instrução pequena e centralizada) ---
-    instruction = "Assinale apenas uma opção por questão."
-    instruction_bbox = draw.textbbox((0,0), instruction, font=footer_font)
-    instruction_w = instruction_bbox[2] - instruction_bbox[0]
-    instruction_h = instruction_bbox[3] - instruction_bbox[1]
-    footer_y = page_height - margin - instruction_h # Posiciona acima da margem inferior
-    draw.text(((page_width - instruction_w) / 2, footer_y), instruction, font=footer_font, fill=(180, 180, 180)) # Cinza bem claro
-
-    # --- Retornar Imagem ---
+    # Rodapé simples
+    footer_text = "Gerado automaticamente - Testify"
+    footer_bbox = draw.textbbox((0,0), footer_text, font=font_small)
+    footer_w = footer_bbox[2] - footer_bbox[0]
+    draw.text(((page_width - footer_w)/2, page_height - margin - 30), footer_text, fill="#555", font=font_small)
     return img
-# --- Fim da função generate_fixed_gabarito_png ---
 
 
 # --- Configuração do Servidor FastAPI ---
@@ -298,11 +259,10 @@ async def generate_gabarito_endpoint(request_data: GabaritoRequest):
                 font_path=font_path
             )
         else:
-            # Fallback antigo (sem respostas para preencher)
-            img_pil = generate_fixed_gabarito_png(
-                num_questions=request_data.numQuestoes,
-                title=request_data.tituloProva,
-                font_path=font_path
+            # Fallback novo: layout de bolhas totalmente em branco (sem preenchimento)
+            img_pil = generate_gabarito_em_branco(
+                tituloProva=request_data.tituloProva,
+                numQuestoes=request_data.numQuestoes
             )
 
         # Prepara a imagem para envio
