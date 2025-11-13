@@ -3,7 +3,7 @@
 # --- IMPORTAÇÕES ESSENCIAIS ---
 from fastapi import FastAPI, HTTPException #
 from fastapi.responses import StreamingResponse #
-from pydantic import BaseModel #
+from pydantic import BaseModel, Field #
 from PIL import Image, ImageDraw, ImageFont # Pillow é importado como PIL
 import math
 import io
@@ -173,9 +173,104 @@ app = FastAPI()
 # Modelo para validar os dados recebidos do App (Pydantic)
 class GabaritoRequest(BaseModel):
     tituloProva: str
-    numQuestoes: int
+    numQuestoes: int = Field(gt=0, description="Número total de questões")
+    respostas: list[str] | None = Field(default=None, description="Lista opcional com as respostas corretas (ex: ['B','A',...])")
 
 # Endpoint que recebe os dados e retorna a imagem
+def generate_gabarito_com_respostas(respostas: list[str], title: str, font_path: str | None):
+    """Gera imagem de gabarito vertical com instruções e círculos preenchidos para respostas corretas.
+
+    Contrato:
+    - entradas: respostas (lista de letras A-E), title (str), font_path (str|None)
+    - saída: PIL.Image com gabarito desenhado
+    - erro: se alguma letra não estiver em A-E, substitui por 'A' e continua (robustez)
+    """
+    options = ['A', 'B', 'C', 'D', 'E']
+    # Sanitiza respostas (garante letras válidas)
+    respostas_sanit = [r.upper() if r and r.upper() in options else 'A' for r in respostas]
+
+    page_width = 1240
+    page_height = 1754
+    margin = 80
+    line_spacing = 60
+    circle_radius = 20
+    circle_padding = 40  # Espaço entre círculos
+
+    try:
+        font_bold = ImageFont.truetype(font_path, 26) if font_path else ImageFont.load_default()
+        font = ImageFont.truetype(font_path, 22) if font_path else ImageFont.load_default()
+        font_small = ImageFont.truetype(font_path, 18) if font_path else ImageFont.load_default()
+    except Exception:
+        font_bold = ImageFont.load_default()
+        font = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+
+    img = Image.new("RGB", (page_width, page_height), "white")
+    draw = ImageDraw.Draw(img)
+
+    x_start = margin
+    y_pos = margin
+
+    # Título
+    draw.text((x_start, y_pos), title.upper(), fill="black", font=font_bold)
+    title_bbox = draw.textbbox((x_start, y_pos), title.upper(), font=font_bold)
+    y_pos += (title_bbox[3] - title_bbox[1]) + 30
+
+    # Bloco de Instruções (pedido do usuário)
+    draw.text((x_start, y_pos), "Instruções:", fill="black", font=font_bold)
+    y_pos += 30
+    draw.text((x_start, y_pos), "• Pinte completamente o círculo da resposta.", fill="black", font=font)
+    y_pos += 25
+    draw.text((x_start, y_pos), "• Assinale apenas uma opção por questão.", fill="black", font=font)
+    y_pos += 50  # Mais espaço antes das questões
+
+    # Desenho das questões
+    start_options_x = x_start + 100  # Onde as bolhas começam (depois do número)
+    for i, resposta_correta in enumerate(respostas_sanit):
+        # Número da questão
+        question_num_text = f"{i+1:02}."
+        draw.text((x_start, y_pos), question_num_text, fill="black", font=font_bold)
+
+        # Loop interno para 5 opções
+        for j, option_text in enumerate(options):
+            circle_x = start_options_x + (j * (circle_radius * 2 + circle_padding))
+            box = [
+                (circle_x - circle_radius, y_pos - circle_radius),
+                (circle_x + circle_radius, y_pos + circle_radius)
+            ]
+
+            # Cálculo do posicionamento do texto centralizado
+            bbox = font.getbbox(option_text)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            text_x = circle_x - (text_w / 2)
+            text_y = y_pos - (text_h / 2) - 2  # Ajuste fino vertical
+
+            if option_text == resposta_correta:
+                # Círculo preenchido + letra branca
+                draw.ellipse(box, fill="black", outline="black")
+                draw.text((text_x, text_y), option_text, fill="white", font=font)
+            else:
+                # Círculo vazio
+                draw.ellipse(box, fill="white", outline="black", width=2)
+                draw.text((text_x, text_y), option_text, fill="black", font=font)
+
+        y_pos += line_spacing
+
+        # Se aproximando do final da página cria nova coluna simples (wrap vertical)
+        if y_pos + line_spacing > page_height - margin:
+            # Nova coluna
+            x_start += (page_width // 2)
+            start_options_x = x_start + 100
+            y_pos = margin + 40  # Reinicia abaixo do título imaginário
+
+    # Rodapé simples
+    footer_text = "Gerado automaticamente - Testify"
+    footer_bbox = draw.textbbox((0,0), footer_text, font=font_small)
+    footer_w = footer_bbox[2] - footer_bbox[0]
+    draw.text(((page_width - footer_w)/2, page_height - margin - 30), footer_text, fill="#555", font=font_small)
+    return img
+
 @app.post("/generate_gabarito")
 async def generate_gabarito_endpoint(request_data: GabaritoRequest):
     try:
@@ -195,12 +290,20 @@ async def generate_gabarito_endpoint(request_data: GabaritoRequest):
         if not font_path:
              print("Nenhuma fonte TTF encontrada nos caminhos padrão. Usando fonte default.")
 
-        # Chama a função para gerar a imagem
-        img_pil = generate_fixed_gabarito_png(
-            num_questions=request_data.numQuestoes,
-            title=request_data.tituloProva, # O título é usado no cabeçalho
-            font_path=font_path
-        )
+        if request_data.respostas:
+            # Usa nova função com respostas (ignora numQuestoes se tamanho divergir)
+            img_pil = generate_gabarito_com_respostas(
+                respostas=request_data.respostas,
+                title=request_data.tituloProva,
+                font_path=font_path
+            )
+        else:
+            # Fallback antigo (sem respostas para preencher)
+            img_pil = generate_fixed_gabarito_png(
+                num_questions=request_data.numQuestoes,
+                title=request_data.tituloProva,
+                font_path=font_path
+            )
 
         # Prepara a imagem para envio
         img_io = io.BytesIO()
