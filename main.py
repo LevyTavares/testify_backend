@@ -1,157 +1,49 @@
 # main.py - VERSÃO COMPLETA (Revisão 8 - Layout Minimalista Refinado)
 
 # --- IMPORTAÇÕES ESSENCIAIS ---
-from fastapi import FastAPI, HTTPException #
-from fastapi.responses import StreamingResponse #
+from fastapi import FastAPI, HTTPException, Response, File, UploadFile, Form #
+from fastapi.responses import StreamingResponse, FileResponse #
 from pydantic import BaseModel, Field #
 from PIL import Image, ImageDraw, ImageFont # Pillow é importado como PIL
 import math
 import io
 import os # Para checar a existência de fontes
+import uuid # Para gerar nomes de arquivo únicos
+import json # Para converter as respostas
+from gen_gabarito import generate_gabarito_png_improved
+from grade_it import grade_gabarito_improved # Importa o corretor
 
 # --- Novo fallback: gerar gabarito em branco (layout de bolhas) ---
 def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
-    """Gera imagem de gabarito no novo layout de bolhas, totalmente em branco.
+    # Define o nome da pasta
+    TEMPLATES_DIR = "templates"
 
-    Entradas:
-    - tituloProva: título no topo do gabarito
-    - numQuestoes: quantidade de questões a desenhar
+    # Garante que a pasta 'templates' exista
+    os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
-    Saída: PIL.Image com o gabarito desenhado sem respostas preenchidas.
-    """
-    options = ['A', 'B', 'C', 'D', 'E']
+    # Gera um nome de arquivo único para evitar conflitos
+    file_basename = str(uuid.uuid4())
 
-    page_width = 1240
-    page_height = 1754
-    margin = 80
-    line_spacing = 60
-    circle_radius = 20
-    circle_padding = 40  # Espaço entre círculos
-
-    # Tenta encontrar um caminho de fonte válido (mesma heurística do endpoint)
-    font_path = None
-    possible_fonts = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    ]
-    for f in possible_fonts:
-        if os.path.exists(f):
-            font_path = f
-            break
+    # Define os caminhos dentro da pasta 'templates'
+    # (os.path.join lida com / ou \\ automaticamente)
+    png_filename = os.path.join(TEMPLATES_DIR, f"{file_basename}.png")
+    json_filename = os.path.join(TEMPLATES_DIR, f"{file_basename}_positions.json")
 
     try:
-        font_bold = ImageFont.truetype(font_path, 26) if font_path else ImageFont.load_default()
-        font = ImageFont.truetype(font_path, 22) if font_path else ImageFont.load_default()
-        font_small = ImageFont.truetype(font_path, 18) if font_path else ImageFont.load_default()
-    except Exception:
-        font_bold = ImageFont.load_default()
-        font = ImageFont.load_default()
-        font_small = ImageFont.load_default()
+        # Chama a função importada do gen_gabarito.py
+        # Ela salva o PNG e o JSON automaticamente
+        generate_gabarito_png_improved(
+            filename=png_filename,
+            num_questions=numQuestoes,
+            title=tituloProva,
+            subtitle=f"Nome: ________ Matrícula: ________ Turma: ________"
+        )
 
-    img = Image.new("RGB", (page_width, page_height), "white")
-    draw = ImageDraw.Draw(img)
-
-    x_start = margin
-    y_pos = margin
-
-    # Título (centralizado)
-    title_text = tituloProva.upper()
-    title_width = draw.textlength(title_text, font=font_bold)
-    x_title_pos = (page_width - title_width) / 2
-    draw.text((x_title_pos, y_pos), title_text, fill="black", font=font_bold)
-    title_bbox = draw.textbbox((x_title_pos, y_pos), title_text, font=font_bold)
-    y_pos += (title_bbox[3] - title_bbox[1]) + 30
-
-    # Adiciona campos do Aluno (Layout Flexível)
-    try:
-        # Tenta usar uma fonte um pouco maior para os campos
-        field_font = ImageFont.truetype("LiberationSans-Regular.ttf", size=18)
-    except Exception:
-        field_font = ImageFont.load_default()
-
-    line_y = y_pos + 20  # Posição Y das linhas
-    field_text_y = y_pos + 5  # Posição Y dos rótulos
-
-    # Largura útil da página (largura total - 2x a margem esquerda)
-    usable_page_width = page_width - (2 * x_start)
-
-    # --- Campo Nome ---
-    x_nome = x_start
-    label_nome = "Nome:"
-    label_nome_width = draw.textlength(label_nome, font=field_font)
-    line_nome_start = x_nome + label_nome_width + 10
-    line_nome_end = x_nome + (usable_page_width * 0.55)  # 55% da largura
-
-    draw.text((x_nome, field_text_y), label_nome, fill="black", font=field_font)
-    draw.line([(line_nome_start, line_y), (line_nome_end, line_y)], fill="black", width=1)
-
-    # --- Campo Matrícula ---
-    x_matricula = line_nome_end + 20  # 20px de espaço
-    label_matricula = "Matrícula:"  # ATUALIZADO
-    label_matricula_width = draw.textlength(label_matricula, font=field_font)
-    line_matricula_start = x_matricula + label_matricula_width + 10
-    line_matricula_end = x_matricula + (usable_page_width * 0.25)  # 25% da largura
-
-    draw.text((x_matricula, field_text_y), label_matricula, fill="black", font=field_font)
-    draw.line([(line_matricula_start, line_y), (line_matricula_end, line_y)], fill="black", width=1)
-
-    # --- Campo Turma ---
-    x_turma = line_matricula_end + 20
-    label_turma = "Turma:"
-    label_turma_width = draw.textlength(label_turma, font=field_font)
-    line_turma_start = x_turma + label_turma_width + 10
-    line_turma_end = page_width - x_start  # Vai até a margem direita
-
-    draw.text((x_turma, field_text_y), label_turma, fill="black", font=field_font)
-    draw.line([(line_turma_start, line_y), (line_turma_end, line_y)], fill="black", width=1)
-
-    y_pos += 60  # Espaço extra para os campos
-
-    # Desenho das questões (sempre círculos vazios)
-    start_options_x = x_start + 100  # Onde as bolhas começam (depois do número)
-    for i in range(numQuestoes):
-        # Número da questão
-        question_num_text = f"{i+1:02}."
-        draw.text((x_start, y_pos), question_num_text, fill="black", font=font_bold)
-
-        # 5 opções vazias
-        for j, option_text in enumerate(options):
-            circle_x = start_options_x + (j * (circle_radius * 2 + circle_padding))
-            box = [
-                (circle_x - circle_radius, y_pos - circle_radius),
-                (circle_x + circle_radius, y_pos + circle_radius)
-            ]
-
-            # Texto centralizado dentro do círculo
-            bbox = font.getbbox(option_text)
-            text_w = bbox[2] - bbox[0]
-            text_h = bbox[3] - bbox[1]
-            text_x = circle_x - (text_w / 2)
-            text_y = y_pos - (text_h / 2) - 2
-
-            # Sempre desenha o círculo vazio
-            draw.ellipse(box, fill="white", outline="black", width=2)
-            draw.text((text_x, text_y), option_text, fill="black", font=font)
-
-        y_pos += line_spacing
-
-        # Wrap para nova coluna simples quando necessário
-        if y_pos + line_spacing > page_height - margin:
-            x_start += (page_width // 2)
-            start_options_x = x_start + 100
-            y_pos = margin + 40
-
-    # Instruções no rodapé
-    y_instructions = page_height - 140  # Posição do rodapé de instruções
-    draw.text((x_start, y_instructions), "Instruções:", fill="black", font=font_bold)
-    y_instructions += 30
-    draw.text((x_start, y_instructions), "• Pinte completamente o círculo da resposta.", fill="black", font=font)
-    y_instructions += 25
-    draw.text((x_start, y_instructions), "• Assinale apenas uma opção por questão.", fill="black", font=font)
-    # Posição correta do rodapé: 30px abaixo da última instrução
-    y_pos_footer = y_instructions + 30
-    draw.text((x_start, y_pos_footer), "Gerado automaticamente - Testify", fill="#AAAAAA", font=font)
-    return img
+        # Retorna os caminhos dos DOIS arquivos gerados
+        return png_filename, json_filename
+    except Exception as e:
+        print(f"Erro ao gerar gabarito: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao gerar imagem do gabarito")
 
 
 # --- Configuração do Servidor FastAPI ---
@@ -162,6 +54,8 @@ class GabaritoRequest(BaseModel):
     tituloProva: str
     numQuestoes: int = Field(gt=0, description="Número total de questões")
     respostas: list[str] | None = Field(default=None, description="Lista opcional com as respostas corretas (ex: ['B','A',...])")
+
+# (Removido) Modelo de resposta JSON não é mais usado, pois retornamos o arquivo PNG com header X-Map-Path
 
 # Endpoint que recebe os dados e retorna a imagem
 def generate_gabarito_com_respostas(respostas: list[str], title: str, font_path: str | None):
@@ -284,21 +178,34 @@ async def generate_gabarito_endpoint(request_data: GabaritoRequest):
                 title=request_data.tituloProva,
                 font_path=font_path
             )
-        else:
-            # Fallback novo: layout de bolhas totalmente em branco (sem preenchimento)
-            img_pil = generate_gabarito_em_branco(
-                tituloProva=request_data.tituloProva,
-                numQuestoes=request_data.numQuestoes
-            )
 
-        # Prepara a imagem para envio
-        img_io = io.BytesIO()
-        img_pil.save(img_io, 'PNG', dpi=(150, 150)) # DPI ajustado
-        img_io.seek(0)
-        print("Imagem gerada com sucesso. Enviando resposta.")
-        headers = {"Content-Disposition": 'inline; filename="gabarito.png"'}
-        # Garante que o media_type está correto
-        return StreamingResponse(img_io, media_type="image/png", headers=headers)
+            # Prepara a imagem para envio (mantém comportamento antigo para este caso)
+            img_io = io.BytesIO()
+            img_pil.save(img_io, 'PNG', dpi=(150, 150)) # DPI ajustado
+            img_io.seek(0)
+            print("Imagem gerada com sucesso. Enviando resposta.")
+            headers = {"Content-Disposition": 'inline; filename="gabarito.png"'}
+            return StreamingResponse(img_io, media_type="image/png", headers=headers)
+        else:
+            # Fluxo "em branco" (Sem Respostas)
+            try:
+                # 1. Chama a função (que salva os arquivos e retorna os caminhos)
+                png_path, json_map_path = generate_gabarito_em_branco(
+                    request_data.tituloProva,
+                    request_data.numQuestoes
+                )
+
+                # 2. Retorna o ARQUIVO PNG, e coloca o map_path no Header
+                return FileResponse(
+                    png_path,
+                    media_type="image/png",
+                    headers={"X-Map-Path": json_map_path}
+                )
+            except HTTPException as e:
+                raise e
+            except Exception as e:
+                print(e)
+                raise HTTPException(status_code=500, detail="Falha ao processar gabarito em branco")
     except Exception as e:
         print(f"Erro no servidor ao gerar imagem: {e}")
         # Retorna um erro HTTP 500 detalhado
@@ -311,3 +218,52 @@ def read_root():
 
 # --- Para rodar o servidor (use o comando uvicorn no terminal) ---
 # Exemplo: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Endpoint final de correção usando o grade_it.py
+@app.post("/corrigir_prova")
+async def corrigir_prova(
+    file: UploadFile = File(...), # A imagem da câmera
+    map_path: str = Form(...),    # O caminho do "mapa" JSON salvo no DB
+    respostas: str = Form(...)    # As respostas corretas (como string JSON)
+):
+    # Define um caminho temporário para salvar a imagem recebida
+    temp_image_path = os.path.join("templates", f"upload_{file.filename}")
+
+    try:
+        # Garante que a pasta 'templates' exista
+        os.makedirs("templates", exist_ok=True)
+
+        # Salva a imagem enviada no disco
+        with open(temp_image_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        # Carrega o "mapa" de posições
+        with open(map_path, 'r') as f:
+            position_data = json.load(f)
+
+        # Converte a string JSON de respostas em um array Python
+        expected_answers = json.loads(respostas)
+
+        # CHAMA O CORRETOR!
+        grade_results = grade_gabarito_improved(
+            image_path=temp_image_path,
+            expected_answers=expected_answers,
+            position_data=position_data,
+            debug=False # Desliga o debug (não queremos pop-ups no servidor)
+        )
+
+        if grade_results is None:
+            raise HTTPException(status_code=500, detail="Falha ao processar a correção")
+
+        # Retorna o JSON completo com os resultados da correção
+        return grade_results
+
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Arquivo de mapa JSON não encontrado no servidor.")
+    except Exception as e:
+        print(f"Erro na correção: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+    finally:
+        # Limpa a imagem temporária
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
