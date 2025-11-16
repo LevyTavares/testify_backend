@@ -13,10 +13,13 @@ import json # Para converter as respostas
 from gen_gabarito import generate_gabarito_png_improved
 from grade_it import grade_gabarito_improved # Importa o corretor
 
+# Pega o diretório de templates do Render, ou usa "templates" como padrão
+TEMPLATES_DIR = os.environ.get("TEMPLATES_DIR", "templates")
+
 # --- Novo fallback: gerar gabarito em branco (layout de bolhas) ---
 def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
-    # Define o nome da pasta
-    TEMPLATES_DIR = "templates"
+    # Usa a variável global configurável para diretório de templates
+    global TEMPLATES_DIR
 
     # Garante que a pasta 'templates' exista
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
@@ -227,11 +230,11 @@ async def corrigir_prova(
     respostas: str = Form(...)    # As respostas corretas (como string JSON)
 ):
     # Define um caminho temporário para salvar a imagem recebida
-    temp_image_path = os.path.join("templates", f"upload_{file.filename}")
+    temp_image_path = os.path.join(TEMPLATES_DIR, f"upload_{file.filename}")
 
     try:
-        # Garante que a pasta 'templates' exista
-        os.makedirs("templates", exist_ok=True)
+        # Garante que a pasta de templates exista
+        os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
         # Salva a imagem enviada no disco
         with open(temp_image_path, "wb") as buffer:
