@@ -3,3 +3,5 @@ uvicorn[standard]
 Pillow
 opencv-python==4.8.1.78
 numpy<2
+cloudinary
+requests
