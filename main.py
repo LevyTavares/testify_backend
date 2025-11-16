@@ -12,29 +12,31 @@ import uuid # Para gerar nomes de arquivo únicos
 import json # Para converter as respostas
 from gen_gabarito import generate_gabarito_png_improved
 from grade_it import grade_gabarito_improved # Importa o corretor
+import cloudinary
+import cloudinary.uploader
+import requests
 
-# Pega o diretório de templates do Render, ou usa "templates" como padrão
+# Configuração do Cloudinary (Render fornece via variáveis de ambiente)
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET")
+)
+
+# Pega o diretório de templates do Render, ou usa "templates" como padrão (usado apenas em fluxos legados)
 TEMPLATES_DIR = os.environ.get("TEMPLATES_DIR", "templates")
 
 # --- Novo fallback: gerar gabarito em branco (layout de bolhas) ---
 def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
-    # Usa a variável global configurável para diretório de templates
-    global TEMPLATES_DIR
-
-    # Garante que a pasta 'templates' exista
+    TEMPLATES_DIR = "/tmp"  # Usar o diretório temporário do Render
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
-    # Gera um nome de arquivo único para evitar conflitos
     file_basename = str(uuid.uuid4())
-
-    # Define os caminhos dentro da pasta 'templates'
-    # (os.path.join lida com / ou \\ automaticamente)
     png_filename = os.path.join(TEMPLATES_DIR, f"{file_basename}.png")
     json_filename = os.path.join(TEMPLATES_DIR, f"{file_basename}_positions.json")
 
     try:
-        # Chama a função importada do gen_gabarito.py
-        # Ela salva o PNG e o JSON automaticamente
+        # 1. Gera os arquivos localmente (no /tmp)
         generate_gabarito_png_improved(
             filename=png_filename,
             num_questions=numQuestoes,
@@ -42,11 +44,22 @@ def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
             subtitle=f"Nome: ________ Matrícula: ________ Turma: ________"
         )
 
-        # Retorna os caminhos dos DOIS arquivos gerados
-        return png_filename, json_filename
+        # 2. Faz o upload dos arquivos para o Cloudinary
+        png_upload = cloudinary.uploader.upload(png_filename, resource_type="image")
+        json_upload = cloudinary.uploader.upload(json_filename, resource_type="raw")  # "raw" para arquivos .json
+
+        # 3. Retorna as URLs seguras e permanentes
+        return png_upload['secure_url'], json_upload['secure_url']
+
     except Exception as e:
-        print(f"Erro ao gerar gabarito: {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao gerar imagem do gabarito")
+        print(f"Erro no upload para Cloudinary: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao gerar e salvar gabarito")
+    finally:
+        # 4. Limpa os arquivos temporários
+        if os.path.exists(png_filename):
+            os.remove(png_filename)
+        if os.path.exists(json_filename):
+            os.remove(json_filename)
 
 
 # --- Configuração do Servidor FastAPI ---
@@ -192,18 +205,15 @@ async def generate_gabarito_endpoint(request_data: GabaritoRequest):
         else:
             # Fluxo "em branco" (Sem Respostas)
             try:
-                # 1. Chama a função (que salva os arquivos e retorna os caminhos)
-                png_path, json_map_path = generate_gabarito_em_branco(
+                # 1. Chama a nova função (que faz upload e retorna URLs)
+                png_url, json_map_url = generate_gabarito_em_branco(
                     request_data.tituloProva,
                     request_data.numQuestoes
                 )
 
-                # 2. Retorna o ARQUIVO PNG, e coloca o map_path no Header
-                return FileResponse(
-                    png_path,
-                    media_type="image/png",
-                    headers={"X-Map-Path": json_map_path}
-                )
+                # 2. Retorna o JSON com as URLs permanentes
+                return {"image_path": png_url, "map_path": json_map_url}
+
             except HTTPException as e:
                 raise e
             except Exception as e:
@@ -225,48 +235,45 @@ def read_root():
 # Endpoint final de correção usando o grade_it.py
 @app.post("/corrigir_prova")
 async def corrigir_prova(
-    file: UploadFile = File(...), # A imagem da câmera
-    map_path: str = Form(...),    # O caminho do "mapa" JSON salvo no DB
-    respostas: str = Form(...)    # As respostas corretas (como string JSON)
+    file: UploadFile = File(...),  # Imagem da câmera
+    map_path: str = Form(...),     # URL do Cloudinary para o .json
+    respostas: str = Form(...)     # String JSON das respostas
 ):
-    # Define um caminho temporário para salvar a imagem recebida
-    temp_image_path = os.path.join(TEMPLATES_DIR, f"upload_{file.filename}")
+    TEMP_IMAGE_DIR = "/tmp"
+    os.makedirs(TEMP_IMAGE_DIR, exist_ok=True)
+    temp_image_path = os.path.join(TEMP_IMAGE_DIR, f"upload_{uuid.uuid4()}.jpg")
 
     try:
-        # Garante que a pasta de templates exista
-        os.makedirs(TEMPLATES_DIR, exist_ok=True)
-
-        # Salva a imagem enviada no disco
+        # 1. Salva a foto do aluno temporariamente
         with open(temp_image_path, "wb") as buffer:
             buffer.write(await file.read())
 
-        # Carrega o "mapa" de posições
-        with open(map_path, 'r') as f:
-            position_data = json.load(f)
+        # 2. Baixa o "mapa" JSON do Cloudinary
+        response = requests.get(map_path)
+        response.raise_for_status()  # Garante que o download funcionou
+        position_data = response.json()  # Carrega o JSON
 
-        # Converte a string JSON de respostas em um array Python
+        # 3. Converte respostas
         expected_answers = json.loads(respostas)
 
-        # CHAMA O CORRETOR!
+        # 4. CHAMA O CORRETOR!
         grade_results = grade_gabarito_improved(
             image_path=temp_image_path,
             expected_answers=expected_answers,
-            position_data=position_data,
-            debug=False # Desliga o debug (não queremos pop-ups no servidor)
+            position_data=position_data,  # Passa o JSON baixado
+            debug=False
         )
 
         if grade_results is None:
             raise HTTPException(status_code=500, detail="Falha ao processar a correção")
 
-        # Retorna o JSON completo com os resultados da correção
         return grade_results
 
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Arquivo de mapa JSON não encontrado no servidor.")
+    except requests.exceptions.RequestException:
+        raise HTTPException(status_code=404, detail="Arquivo de mapa JSON não encontrado no Cloudinary.")
     except Exception as e:
         print(f"Erro na correção: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
     finally:
-        # Limpa a imagem temporária
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
