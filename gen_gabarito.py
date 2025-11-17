@@ -1,4 +1,95 @@
 import cv2
+import numpy as np
+import json
+import os
+
+
+def generate_gabarito_png_improved(filename, num_questions, title, subtitle):
+    # Proporção A4 (Retrato: 1240x1754)
+    width, height = 1240, 1754
+    img = np.ones((height, width, 3), dtype=np.uint8) * 255
+
+    position_data = {}
+    corner_data = {}
+
+    # --- 1. Desenhar Cantos (MUITO IMPORTANTE) ---
+    margin = 50
+    cw, ch = 30, 30  # Tamanho do canto
+
+    # TL (Top-Left)
+    cv2.rectangle(img, (margin, margin), (margin + cw, margin + ch), (0, 0, 0), -1)
+    corner_data['tl'] = (margin, margin)  # Ponto exato
+
+    # TR (Top-Right)
+    cv2.rectangle(img, (width - margin - cw, margin), (width - margin, margin + ch), (0, 0, 0), -1)
+    corner_data['tr'] = (width - margin, margin)  # Ponto exato
+
+    # BL (Bottom-Left)
+    cv2.rectangle(img, (margin, height - margin - ch), (margin + cw, height - margin), (0, 0, 0), -1)
+    corner_data['bl'] = (margin, height - margin)  # Ponto exato
+
+    # BR (Bottom-Right)
+    cv2.rectangle(img, (width - margin - cw, height - margin - ch), (width - margin, height - margin), (0, 0, 0), -1)
+    corner_data['br'] = (width - margin, height - margin)  # Ponto exato
+
+    position_data['corner_anchors'] = corner_data
+
+    # --- 2. Desenhar Títulos ---
+    cv2.putText(img, title, (int(width / 2) - 150, margin + 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
+    cv2.putText(img, subtitle, (margin + 50, margin + 170), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 1)
+    cv2.line(img, (margin + 50, margin + 180), (width - margin - 50, margin + 180), (0, 0, 0), 1)
+
+    # --- 3. Desenhar Bolhas (Layout Vertical) ---
+    num_cols = 3  # 3 colunas de questões
+    col_width = width // num_cols
+    questions_per_col = int(np.ceil(num_questions / num_cols))
+
+    bubble_radius = 12
+    v_spacing = 35  # Espaçamento vertical entre questões
+    h_spacing = 50  # Espaçamento horizontal entre bolhas
+
+    options = ["A", "B", "C", "D", "E"]
+
+    q_num = 1
+    for c in range(num_cols):
+        start_x_col = (c * col_width) + margin + 40  # Ponto X inicial da coluna
+        start_y = margin + 250  # Ponto Y inicial
+
+        for r in range(questions_per_col):
+            if q_num > num_questions:
+                break
+
+            y = start_y + (r * v_spacing)
+
+            # Desenha o número da questão
+            cv2.putText(img, f"{q_num}.", (start_x_col, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+
+            position_data[str(q_num)] = {}
+
+            # Desenha as 5 bolhas
+            for i, option in enumerate(options):
+                cx = start_x_col + 70 + (i * h_spacing)
+                cy = y
+                cv2.circle(img, (cx, cy), bubble_radius, (0, 0, 0), 2)  # Desenha o círculo
+
+                # Salva a coordenada do centro
+                position_data[str(q_num)][option] = (int(cx), int(cy))
+
+                # Escreve a letra da opção
+                cv2.putText(img, option, (cx - 7, cy - bubble_radius - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+
+            q_num += 1
+
+    # --- 4. Salvar Arquivos ---
+    cv2.imwrite(filename, img)
+
+    json_filename = filename.replace(".png", "_positions.json")
+    try:
+        with open(json_filename, "w") as f:
+            json.dump(position_data, f, indent=4)
+    except IOError as e:
+        print(f"Erro ao salvar JSON: {e}")
+import cv2
 import time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont

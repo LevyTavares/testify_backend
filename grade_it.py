@@ -6,6 +6,54 @@ import math
 import json
 import os
 
+def detect_corner_anchors(image):
+    """Encontra os 4 marcadores de canto na imagem."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    anchors = []
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        # Filtro de área ajustado para os cantos de 30x30
+        if 500 < area < 5000:
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+            if len(approx) == 4:
+                (x, y, w, h) = cv2.boundingRect(approx)
+                aspect_ratio = w / float(h)
+                if 0.8 < aspect_ratio < 1.2:  # Filtra por aspecto (quadrados)
+                    anchors.append(cnt)
+
+    if len(anchors) != 4:
+        print(f"!!! Erro de Detecção: Encontrados {len(anchors)} cantos, esperado 4.")
+        return None
+
+    # Ordena os 4 cantos: TL, TR, BL, BR
+    sorted_anchors = sorted(anchors, key=lambda c: cv2.boundingRect(c)[0])  # Ordena por X
+    left_anchors = sorted_anchors[:2]
+    right_anchors = sorted_anchors[2:]
+
+    left_anchors = sorted(left_anchors, key=lambda c: cv2.boundingRect(c)[1])  # Ordena por Y
+    (tl_cnt, bl_cnt) = left_anchors
+
+    right_anchors = sorted(right_anchors, key=lambda c: cv2.boundingRect(c)[1])  # Ordena por Y
+    (tr_cnt, br_cnt) = right_anchors
+
+    # Pega o centroide de cada contorno
+    M_tl = cv2.moments(tl_cnt)
+    tl = (int(M_tl["m10"] / M_tl["m00"]), int(M_tl["m01"] / M_tl["m00"]))
+    M_tr = cv2.moments(tr_cnt)
+    tr = (int(M_tr["m10"] / M_tr["m00"]), int(M_tr["m01"] / M_tr["m00"]))
+    M_bl = cv2.moments(bl_cnt)
+    bl = (int(M_bl["m10"] / M_bl["m00"]), int(M_bl["m01"] / M_bl["m00"]))
+    M_br = cv2.moments(br_cnt)
+    br = (int(M_br["m10"] / M_br["m00"]), int(M_br["m01"] / M_br["m00"]))
+
+    return np.array([tl, tr, bl, br], dtype="float32")
+
 def grade_with_precise_positions(binary_img, bubble_positions, expected_answers, threshold, debug=False):
     """
     Grade using precisely KNOWN bubble positions
@@ -122,46 +170,85 @@ def grade_with_precise_positions(binary_img, bubble_positions, expected_answers,
         'unanswered': len([r for r in question_results if r['student_answer'] == 'NONE'])
     }
 
-def grade_gabarito_improved(
-    image_path,
-    expected_answers,
-    position_data=None,
-    choices=("A", "B", "C", "D", "E"),
-    threshold=0.2,
-    debug=False
-):
-    """
-    Grade improved answer sheets with header labels
-    """
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Could not load image from {image_path}")
-    
-    # Preprocess
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Enhanced preprocessing
-    kernel = np.ones((3,3), np.uint8)
-    binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 10
-    )
-    
-    # Removing small noise
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-    
-    if debug:
-        print("Preprocessed binary image:")
-        cv2.imshow("Binary Image", binary)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-    
-    if position_data is None:
-        print("Warning: No position data provided. You need to generate position data first.")
+def grade_gabarito_improved(image_path, expected_answers, position_data, debug=False):
+    img_foto_aluno = cv2.imread(image_path)
+    if img_foto_aluno is None:
+        print("Erro ao carregar imagem do aluno")
         return None
-    
-    bubble_positions = position_data['bubble_positions']
-    
-    return grade_with_precise_positions(binary, bubble_positions, expected_answers, threshold, debug)
+
+    # 1. Pega as coordenadas "mestre" dos cantos (do .json)
+    if 'corner_anchors' not in position_data:
+        print("Erro: Mapa JSON não contém 'corner_anchors'. Gere o gabarito novamente.")
+        return {"score": 0, "acertos": 0, "erros": 0, "total": len(expected_answers), "detail": "Mapa de gabarito desatualizado. Por favor, crie um novo gabarito no app."}
+
+    master_corners = position_data['corner_anchors']
+    master_pts = np.array([
+        master_corners['tl'],
+        master_corners['tr'],
+        master_corners['bl'],
+        master_corners['br']
+    ], dtype="float32")
+
+    # 2. Encontra os cantos na foto do aluno
+    photo_pts = detect_corner_anchors(img_foto_aluno)
+    if photo_pts is None:
+        return {"score": 0, "acertos": 0, "erros": 0, "total": len(expected_answers), "detail": "Falha ao detectar os 4 cantos da folha. Tente uma foto melhor, com boa iluminação."}
+
+    # 3. Calcula a matriz de transformação e "achata" a imagem
+    matrix = cv2.getPerspectiveTransform(photo_pts, master_pts)
+
+    # Pega as dimensões da imagem mestre (1240x1754)
+    width, height = 1240, 1754
+
+    img_achatada = cv2.warpPerspective(img_foto_aluno, matrix, (width, height))
+
+    # 4. Agora que a imagem está alinhada, podemos corrigir
+    img_gray = cv2.cvtColor(img_achatada, cv2.COLOR_BGR2GRAY)
+    img_thresh = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+
+    acertos = 0
+    erros = 0
+
+    for i, (question_number, expected_answer) in enumerate(expected_answers.items()):
+        q_num_str = str(question_number)
+        if q_num_str not in position_data:
+            continue
+
+        options = position_data[q_num_str]
+        if not options:
+            continue
+
+        bubble_radius = 12  # Raio da bolha
+        marcada = None
+        max_pixels = -1
+
+        for option, pos in options.items():
+            x, y = int(pos[0]), int(pos[1])
+            mask = np.zeros(img_thresh.shape, dtype="uint8")
+            cv2.circle(mask, (x, y), bubble_radius, 255, -1)
+
+            pixels = cv2.countNonZero(cv2.bitwise_and(img_thresh, img_thresh, mask=mask))
+
+            # Ajuste de sensibilidade: mínimo de 20% da área da bolha
+            if pixels > (np.pi * (bubble_radius**2) * 0.20) and pixels > max_pixels:
+                max_pixels = pixels
+                marcada = option
+
+        if marcada == expected_answer:
+            acertos += 1
+        else:
+            erros += 1
+
+    total_questoes = len(expected_answers)
+    score = (acertos / total_questoes) * 10
+
+    return {
+        "score": round(score, 2),
+        "acertos": acertos,
+        "erros": erros,
+        "total": total_questoes,
+        "detail": "Correção com alinhamento concluída."
+    }
 
 def print_grade_report(grade_results):
     """Print a formatted grade report"""

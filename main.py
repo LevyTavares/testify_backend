@@ -263,10 +263,14 @@ async def corrigir_prova(
             position_data=position_data,  # Passa o JSON baixado
             debug=False
         )
+        if "detail" in grade_results:
+            # Se a correção falhou (ex: cantos não encontrados)
+            if grade_results["score"] == 0:
+                print(f"Falha na correção: {grade_results['detail']}")
+                # Retorna o JSON de erro para o app
+                raise HTTPException(status_code=422, detail=grade_results['detail'])
 
-        if grade_results is None:
-            raise HTTPException(status_code=500, detail="Falha ao processar a correção")
-
+        # Se passou, retorna o JSON de sucesso
         return grade_results
 
     except requests.exceptions.RequestException:
