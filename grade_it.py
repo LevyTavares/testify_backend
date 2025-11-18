@@ -204,11 +204,11 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
 
     # 4. Agora que a imagem está alinhada, podemos corrigir
     img_gray = cv2.cvtColor(img_achatada, cv2.COLOR_BGR2GRAY)
-    # Filtros anti-tela: Blur forte para limpar ruído
-    img_blurred = cv2.GaussianBlur(img_gray, (15, 15), 0)
+    # Filtros anti-tela: Blur suave para limpar ruído
+    img_blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     # Usa Adaptive Threshold para lidar com sombras e iluminação irregular
     img_thresh = cv2.adaptiveThreshold(
-        img_blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 25
+        img_blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 4
     )
 
     acertos = 0
@@ -247,7 +247,7 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
         # Validação Final: Só marca se o vencedor tiver um mínimo de tinta (Ruído)
         # Com bolhas GIGANTES, esperamos muito mais tinta. Uma bolha pintada tem 400+ pixels.
         marcada = None
-        if max_pixels_found > 100:
+        if max_pixels_found > 40:
             marcada = best_option
 
         # LOG REVELADOR: Mostra o que o robô decidiu vs o que era esperado
