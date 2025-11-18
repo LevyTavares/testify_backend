@@ -204,7 +204,10 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
 
     # 4. Agora que a imagem está alinhada, podemos corrigir
     img_gray = cv2.cvtColor(img_achatada, cv2.COLOR_BGR2GRAY)
-    img_thresh = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    # Usa Adaptive Threshold para lidar com sombras e iluminação irregular
+    img_thresh = cv2.adaptiveThreshold(
+        img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+    )
 
     acertos = 0
     erros = 0
@@ -231,6 +234,9 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
             cv2.circle(mask, (x, y), bubble_radius, 255, -1)
 
             pixels = cv2.countNonZero(cv2.bitwise_and(img_thresh, img_thresh, mask=mask))
+            
+            # DEBUG: Ver quantos pixels achou em cada opção
+            print(f"Q{q_num_str} - {option}: {pixels} pixels (Threshold: {int(np.pi * (bubble_radius**2) * 0.20)})")
 
             # Ajuste de sensibilidade: mínimo de 20% da área da bolha
             if pixels > (np.pi * (bubble_radius**2) * 0.20) and pixels > max_pixels:
