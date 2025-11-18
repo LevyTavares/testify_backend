@@ -59,7 +59,7 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
     # Ajustes de espaçamento para caber as bolhas grandes
     start_y_initial = margin + 350
     v_spacing = 65  # Espaço vertical entre linhas
-    h_spacing = 65  # Espaço horizontal entre bolhas
+    h_spacing = 55  # Espaço horizontal entre bolhas (reduzido para caber na largura)
     bubble_radius = 22
 
     q_num = 1
@@ -81,7 +81,7 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
 
             for i, opt in enumerate(options):
                 # Cálculo seguro de X para não estourar a margem
-                cx = start_x + 80 + (i * h_spacing)
+                cx = start_x + 45 + (i * h_spacing)
                 cy = y
 
                 # Bolha Grande
