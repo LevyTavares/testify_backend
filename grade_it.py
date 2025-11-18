@@ -206,7 +206,7 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
     img_gray = cv2.cvtColor(img_achatada, cv2.COLOR_BGR2GRAY)
     # Usa Adaptive Threshold para lidar com sombras e iluminação irregular
     img_thresh = cv2.adaptiveThreshold(
-        img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 2
+        img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 15
     )
 
     acertos = 0
@@ -243,9 +243,9 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
                 best_option = option
 
         # Validação Final: Só marca se o vencedor tiver um mínimo de tinta (Ruído)
-        # Com bolhas GIGANTES, esperamos muito mais tinta
+        # Com bolhas GIGANTES, esperamos muito mais tinta. Uma bolha pintada tem 400+ pixels.
         marcada = None
-        if max_pixels_found > 50:
+        if max_pixels_found > 100:
             marcada = best_option
 
         if marcada == expected_answer:
