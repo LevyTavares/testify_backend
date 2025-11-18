@@ -59,7 +59,7 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
     # Ajustes de espaçamento para caber as bolhas grandes
     start_y_initial = margin + 350
     v_spacing = 65  # Espaço vertical entre linhas
-    h_spacing = 55  # Espaço horizontal entre bolhas (reduzido para caber na largura)
+    h_spacing = 50  # Espaço horizontal entre bolhas (compactado para compensar deslocamento)
     bubble_radius = 22
 
     q_num = 1
@@ -74,14 +74,14 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
             y = start_y_initial + (r * v_spacing)
 
             # Número da questão
-            cv2.putText(img, f"{q_num}.", (start_x, y+15), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,0), 2)
+            cv2.putText(img, f"{q_num}.", (start_x, y+10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,0), 2)
 
             position_data[str(q_num)] = {}
             options = ["A", "B", "C", "D", "E"]
 
             for i, opt in enumerate(options):
                 # Cálculo seguro de X para não estourar a margem
-                cx = start_x + 45 + (i * h_spacing)
+                cx = start_x + 70 + (i * h_spacing)
                 cy = y
 
                 # Bolha Grande
