@@ -3,10 +3,20 @@ import numpy as np
 import json
 import os
 import uuid
+import unicodedata
 import cloudinary.uploader
 
 
+def remove_accents(input_str):
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+
 def generate_and_upload_gabarito(num_questions, title, subtitle):
+    # Normalizar texto para evitar problemas de acentos no OpenCV
+    title = remove_accents(title)
+    # O subtitle será fixo, definido abaixo
+    
     # 1. Configuração A4 Vertical (Retrato) - Garantido
     width, height = 1240, 1754
     img = np.ones((height, width, 3), dtype=np.uint8) * 255
@@ -30,25 +40,17 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
 
     position_data["corner_anchors"] = corner_data
 
-    # 3. Cabeçalho
-    cv2.putText(
-        img,
-        title,
-        (int(width / 2) - 200, margin + 100),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1.5,
-        (0, 0, 0),
-        3,
-    )
-    cv2.putText(
-        img,
-        subtitle,
-        (margin + 50, margin + 180),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 0, 0),
-        2,
-    )
+    # --- 3. Cabeçalho (Ajustado) ---
+    # Título principal (Y=100)
+    cv2.putText(img, title, (int(width/2) - 200, margin + 100), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,0), 3)
+    
+    # Linha 1: Nome (Y=160)
+    line1 = "Nome: _________________________________________________"
+    cv2.putText(img, line1, (margin + 50, margin + 160), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2)
+    
+    # Linha 2: Matrícula, Turma e Data (Y=210)
+    line2 = "Matricula: _________  Turma: _______  Data: ___/___/___"
+    cv2.putText(img, line2, (margin + 50, margin + 210), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2)
 
     # 4. Bolhas em 3 Colunas (Layout Vertical)
     num_cols = 3
@@ -58,7 +60,7 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
     q_num = 1
     for c in range(num_cols):
         start_x = (c * col_width) + margin + 20
-        start_y = margin + 280
+        start_y = margin + 300
         for r in range(questions_per_col):
             if q_num > num_questions:
                 break

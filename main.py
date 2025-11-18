@@ -239,6 +239,8 @@ async def corrigir_prova(
         # Se passou, retorna o JSON de sucesso
         return grade_results
 
+    except HTTPException as he:
+        raise he  # Deixa o 422 passar limpo
     except requests.exceptions.RequestException:
         raise HTTPException(status_code=404, detail="Arquivo de mapa JSON não encontrado no Cloudinary.")
     except Exception as e:
