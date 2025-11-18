@@ -224,9 +224,9 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
         if not options:
             continue
 
-        bubble_radius = 12  # Raio da bolha
-        marcada = None
-        max_pixels = -1
+        bubble_radius = 10  # Raio da bolha (reduzido para evitar ler a borda impressa)
+        best_option = None
+        max_pixels_found = -1
 
         for option, pos in options.items():
             x, y = int(pos[0]), int(pos[1])
@@ -236,12 +236,17 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
             pixels = cv2.countNonZero(cv2.bitwise_and(img_thresh, img_thresh, mask=mask))
             
             # DEBUG: Ver quantos pixels achou em cada opção
-            print(f"Q{q_num_str} - {option}: {pixels} pixels (Threshold: {int(np.pi * (bubble_radius**2) * 0.20)})")
+            print(f"Q{q_num_str} - {option}: {pixels}")
 
-            # Ajuste de sensibilidade: mínimo de 20% da área da bolha
-            if pixels > (np.pi * (bubble_radius**2) * 0.20) and pixels > max_pixels:
-                max_pixels = pixels
-                marcada = option
+            if pixels > max_pixels_found:
+                max_pixels_found = pixels
+                best_option = option
+
+        # Validação Final: Só marca se o vencedor tiver um mínimo de tinta (Ruído)
+        # Vamos baixar a régua para 50 pixels (já que reduzimos o raio)
+        marcada = None
+        if max_pixels_found > 50:
+            marcada = best_option
 
         if marcada == expected_answer:
             acertos += 1
