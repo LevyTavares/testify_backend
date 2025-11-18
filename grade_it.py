@@ -224,7 +224,7 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
         if not options:
             continue
 
-        bubble_radius = 11  # Raio da bolha (ajustado para melhor detecção)
+        bubble_radius = 18  # Raio da bolha (lê um pouco dentro da bolha de 22)
         best_option = None
         max_pixels_found = -1
 
@@ -243,9 +243,9 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
                 best_option = option
 
         # Validação Final: Só marca se o vencedor tiver um mínimo de tinta (Ruído)
-        # Vamos aceitar qualquer pingo de tinta por enquanto
+        # Com bolhas GIGANTES, esperamos muito mais tinta
         marcada = None
-        if max_pixels_found > 10:
+        if max_pixels_found > 50:
             marcada = best_option
 
         if marcada == expected_answer:
