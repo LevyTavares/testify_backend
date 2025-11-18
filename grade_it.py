@@ -204,9 +204,11 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
 
     # 4. Agora que a imagem está alinhada, podemos corrigir
     img_gray = cv2.cvtColor(img_achatada, cv2.COLOR_BGR2GRAY)
+    # Filtros anti-tela: Blur forte para limpar ruído
+    img_blurred = cv2.GaussianBlur(img_gray, (15, 15), 0)
     # Usa Adaptive Threshold para lidar com sombras e iluminação irregular
     img_thresh = cv2.adaptiveThreshold(
-        img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 15
+        img_blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 25
     )
 
     acertos = 0
@@ -224,7 +226,7 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
         if not options:
             continue
 
-        bubble_radius = 18  # Raio da bolha (lê um pouco dentro da bolha de 22)
+        bubble_radius = 14  # Raio da bolha (ler apenas o miolo)
         best_option = None
         max_pixels_found = -1
 
@@ -247,6 +249,9 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
         marcada = None
         if max_pixels_found > 100:
             marcada = best_option
+
+        # LOG REVELADOR: Mostra o que o robô decidiu vs o que era esperado
+        print(f"CHECK FINAL Q{q_num_str}: Detectado='{marcada}' vs Esperado='{expected_answer}'")
 
         if marcada == expected_answer:
             acertos += 1
