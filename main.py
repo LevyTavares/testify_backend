@@ -10,7 +10,7 @@ import io
 import os # Para checar a existência de fontes
 import uuid # Para gerar nomes de arquivo únicos
 import json # Para converter as respostas
-from gen_gabarito import generate_gabarito_png_improved
+from gen_gabarito import generate_and_upload_gabarito
 from grade_it import grade_gabarito_improved # Importa o corretor
 import cloudinary
 import cloudinary.uploader
@@ -26,40 +26,7 @@ cloudinary.config(
 # Pega o diretório de templates do Render, ou usa "templates" como padrão (usado apenas em fluxos legados)
 TEMPLATES_DIR = os.environ.get("TEMPLATES_DIR", "templates")
 
-# --- Novo fallback: gerar gabarito em branco (layout de bolhas) ---
-def generate_gabarito_em_branco(tituloProva: str, numQuestoes: int):
-    TEMPLATES_DIR = "/tmp"  # Usar o diretório temporário do Render
-    os.makedirs(TEMPLATES_DIR, exist_ok=True)
-
-    file_basename = str(uuid.uuid4())
-    png_filename = os.path.join(TEMPLATES_DIR, f"{file_basename}.png")
-    json_filename = os.path.join(TEMPLATES_DIR, f"{file_basename}_positions.json")
-
-    try:
-        # 1. Gera os arquivos localmente (no /tmp)
-        generate_gabarito_png_improved(
-            filename=png_filename,
-            num_questions=numQuestoes,
-            title=tituloProva,
-            subtitle=f"Nome: ________ Matrícula: ________ Turma: ________"
-        )
-
-        # 2. Faz o upload dos arquivos para o Cloudinary
-        png_upload = cloudinary.uploader.upload(png_filename, resource_type="image")
-        json_upload = cloudinary.uploader.upload(json_filename, resource_type="raw")  # "raw" para arquivos .json
-
-        # 3. Retorna as URLs seguras e permanentes
-        return png_upload['secure_url'], json_upload['secure_url']
-
-    except Exception as e:
-        print(f"Erro no upload para Cloudinary: {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao gerar e salvar gabarito")
-    finally:
-        # 4. Limpa os arquivos temporários
-        if os.path.exists(png_filename):
-            os.remove(png_filename)
-        if os.path.exists(json_filename):
-            os.remove(json_filename)
+# (Removido) Funções legadas de geração local e upload direto
 
 
 # --- Configuração do Servidor FastAPI ---
@@ -203,22 +170,21 @@ async def generate_gabarito_endpoint(request_data: GabaritoRequest):
             headers = {"Content-Disposition": 'inline; filename="gabarito.png"'}
             return StreamingResponse(img_io, media_type="image/png", headers=headers)
         else:
-            # Fluxo "em branco" (Sem Respostas)
+            # Fluxo "em branco" (Sem Respostas) usando gerador autônomo com upload
             try:
-                # 1. Chama a nova função (que faz upload e retorna URLs)
-                png_url, json_map_url = generate_gabarito_em_branco(
+                image_url, map_url = generate_and_upload_gabarito(
+                    request_data.numQuestoes,
                     request_data.tituloProva,
-                    request_data.numQuestoes
+                    "Nome: __________________ Data: ___/___/___",
                 )
-
-                # 2. Retorna o JSON com as URLs permanentes
-                return {"image_path": png_url, "map_path": json_map_url}
-
+                return {"image_path": image_url, "map_path": map_url}
             except HTTPException as e:
                 raise e
             except Exception as e:
                 print(e)
-                raise HTTPException(status_code=500, detail="Falha ao processar gabarito em branco")
+                raise HTTPException(
+                    status_code=500, detail="Falha ao processar gabarito em branco"
+                )
     except Exception as e:
         print(f"Erro no servidor ao gerar imagem: {e}")
         # Retorna um erro HTTP 500 detalhado
