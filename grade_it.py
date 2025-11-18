@@ -250,10 +250,14 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
         if max_pixels_found > 40:
             marcada = best_option
 
-        # LOG REVELADOR: Mostra o que o robô decidiu vs o que era esperado
-        print(f"CHECK FINAL Q{q_num_str}: Detectado='{marcada}' vs Esperado='{expected_answer}'")
+        # Normalização BRUTAL para evitar erro de espaço invisível
+        str_marcada = str(marcada).strip().upper() if marcada else "NONE"
+        str_expected = str(expected_answer).strip().upper()
 
-        if marcada == expected_answer:
+        # LOG REVELADOR: Mostra o que o robô decidiu vs o que era esperado (normalizado)
+        print(f"CHECK FINAL Q{q_num_str}: Detectado='{str_marcada}' vs Esperado='{str_expected}'")
+
+        if str_marcada == str_expected:
             acertos += 1
         else:
             erros += 1
@@ -261,13 +265,15 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
     total_questoes = len(expected_answers)
     score = (acertos / total_questoes) * 10
 
-    return {
+    result_final = {
         "score": round(score, 2),
         "acertos": acertos,
         "erros": erros,
         "total": total_questoes,
         "detail": "Correção com alinhamento concluída."
     }
+    print(f"RESULTADO FINAL NO BACKEND: {result_final}")  # Debug essencial
+    return result_final
 
 def print_grade_report(grade_results):
     """Print a formatted grade report"""
