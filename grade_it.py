@@ -209,7 +209,10 @@ def grade_gabarito_improved(image_path, expected_answers, position_data, debug=F
     acertos = 0
     erros = 0
 
-    for i, (question_number, expected_answer) in enumerate(expected_answers.items()):
+    # Iterar sobre a lista diretamente
+    for i, expected_answer in enumerate(expected_answers):
+        # O índice começa em 0, então a questão é i + 1
+        question_number = i + 1
         q_num_str = str(question_number)
         if q_num_str not in position_data:
             continue
