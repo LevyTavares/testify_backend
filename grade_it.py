@@ -4,45 +4,51 @@ import json
 from PIL import Image
 
 
+# Função dummy para compatibilidade caso o main.py tente importar
+def detect_corner_anchors(image):
+    return None
+
+
 def grade_gabarito_improved(image_path, expected_answers, position_data=None, debug=False):
     """
-    Corrige a prova usando Google Gemini 1.5 Flash.
-    Ignora position_data (não precisa mais de coordenadas).
+    Corrige a prova usando a Inteligência Artificial do Google Gemini 1.5 Flash.
+    Esta função substitui a antiga lógica de OpenCV.
     """
 
+    # 1. Verificação da Chave
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("ERRO: GEMINI_API_KEY não encontrada nas variáveis de ambiente.")
+        print("ERRO CRÍTICO: GEMINI_API_KEY não encontrada nas variáveis de ambiente.")
         return {
             "score": 0,
             "acertos": 0,
             "erros": 0,
             "total": 0,
-            "detail": "Erro de configuração do servidor (Falta API Key).",
+            "detail": "Erro no servidor: Chave da IA não configurada.",
         }
 
     try:
-        # 1. Configura a IA
+        print("--- 🤖 Iniciando análise com Gemini AI ---")
+
+        # 2. Configuração da IA
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash")
 
-        # 2. Carrega a imagem
-        print("--- Iniciando análise com Gemini AI ---")
+        # 3. Carregamento da Imagem
         img = Image.open(image_path)
 
-        # 3. O Prompt Mágico
+        # 4. O Prompt para a IA
         prompt = """
-        Analise esta imagem de um gabarito de prova.
-        Sua tarefa é identificar qual alternativa (A, B, C, D, E) foi preenchida para cada questão numérica.
+        Aja como um sistema de correção óptica de provas. Analise esta imagem de um gabarito.
+        Sua tarefa é identificar qual alternativa (A, B, C, D, E) foi preenchida para cada questão.
 
-        Regras:
-        1. Identifique o número da questão (ex: 1, 2, 10).
-        2. Identifique a bolha preenchida (tinta preta/azul).
-        3. Se houver rasura óbvia ou marcação dupla, considere "ANULADA".
-        4. Se não houver marcação, considere "NULA".
+        Regras de Leitura:
+        1. Identifique o número da questão (1, 2, etc).
+        2. Identifique qual bolha está preenchida (tinta escura/azul/preta).
+        3. Ignore sombras, reflexos ou pequenas sujeiras. Foque na marcação intencional.
+        4. Se houver rasura ou duas marcadas, considere inválida.
 
-        SAÍDA OBRIGATÓRIA:
-        Retorne APENAS um objeto JSON válido, sem blocos de código markdown, neste formato exato:
+        SAÍDA: Retorne APENAS um JSON válido neste formato simples:
         {
           "1": "A",
           "2": "C",
@@ -50,58 +56,57 @@ def grade_gabarito_improved(image_path, expected_answers, position_data=None, de
         }
         """
 
-        # 4. Envia para o Google
+        # 5. Envio e Resposta
         response = model.generate_content([prompt, img])
 
-        # 5. Limpeza da Resposta
+        # 6. Tratamento da Resposta (Limpeza de Markdown)
         text_response = response.text.strip()
-        # Remove crases de markdown se a IA colocar
         if text_response.startswith("```json"):
             text_response = text_response.replace("```json", "").replace("```", "")
         elif text_response.startswith("```"):
             text_response = text_response.replace("```", "")
 
-        # Converte para dicionário
         detected_answers = json.loads(text_response)
-        print(f"IA Detectou: {detected_answers}")
+        print(f"✅ IA Detectou: {detected_answers}")
 
-        # 6. Comparação (Correção)
+        # 7. Cálculo da Nota
         acertos = 0
         erros = 0
         total_questoes = len(expected_answers)
 
-        # expected_answers é uma lista ["A", "B", ...] vinda do app
+        # Itera sobre o gabarito correto enviado pelo app
         for i, gabarito_correto in enumerate(expected_answers):
             num_questao = str(i + 1)
             gabarito_correto = str(gabarito_correto).upper().strip()
 
-            # Pega o que a IA achou (pelo número da questão)
-            resposta_aluno = detected_answers.get(num_questao, "NULA")
-            resposta_aluno = str(resposta_aluno).upper().strip()
+            # Busca a resposta que a IA leu
+            resposta_aluno = str(detected_answers.get(num_questao, "NULA")).upper().strip()
 
             if resposta_aluno == gabarito_correto:
                 acertos += 1
             else:
                 erros += 1
 
-        score = (acertos / total_questoes) * 10 if total_questoes > 0 else 0
+        score = (acertos / total_questoes) * 10 if total_questoes > 0 else 0.0
 
-        return {
+        result = {
             "score": round(score, 1),
             "acertos": acertos,
             "erros": erros,
             "total": total_questoes,
             "detail": "Correção via IA concluída com sucesso.",
         }
+        print(f"📊 Resultado Final: {result}")
+        return result
 
     except Exception as e:
-        print(f"Erro fatal na IA: {e}")
+        print(f"❌ Erro fatal na IA: {e}")
         return {
-            "score": 0,
+            "score": 0.0,
             "acertos": 0,
             "erros": 0,
             "total": 0,
-            "detail": "Falha ao processar imagem com IA. Tente novamente.",
+            "detail": "Falha ao processar imagem. Tente novamente.",
         }
 import cv2
 import time
