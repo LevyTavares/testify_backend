@@ -86,8 +86,8 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
 
                 # Bolha Grande
                 cv2.circle(img, (cx, cy), bubble_radius, (0,0,0), 2)
-                # Letra (Cinza para não confundir com marcação)
-                cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150,150,150), 2)
+                # Letra (Cinza bem claro para não confundir com marcação)
+                cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (210,210,210), 2)
 
                 # Salvar posição central
                 position_data[str(q_num)][opt] = (cx, cy)
