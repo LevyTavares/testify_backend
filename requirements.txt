@@ -1,8 +1,9 @@
 fastapi
 uvicorn[standard]
 Pillow
-numpy<2
+numpy
 cloudinary
 requests
 python-multipart
 google-generativeai
+opencv-python-headless
