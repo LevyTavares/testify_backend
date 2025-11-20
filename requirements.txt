@@ -5,5 +5,5 @@ numpy
 cloudinary
 requests
 python-multipart
-google-generativeai
+google-generativeai>=0.8.3
 opencv-python-headless
