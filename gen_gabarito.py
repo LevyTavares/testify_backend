@@ -120,3 +120,77 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
         print(f"Erro Cloudinary: {e}")
         raise e
         
+
+def generate_gabarito_with_answers(num_questions, title, subtitle, answers_dict):
+    """
+    Gera uma imagem visual do gabarito com as respostas pintadas usando o Layout Gigante.
+    answers_dict: Dicionário com as respostas certas {'1': 'A', '2': 'C'}
+    Retorna a URL segura (secure_url) da imagem enviada ao Cloudinary ou None em falha.
+    """
+    # 1. Configuração A4 Vertical (Igual ao gerador principal)
+    width, height = 1240, 1754
+    img = np.ones((height, width, 3), dtype=np.uint8) * 255
+    margin = 50
+
+    # Título (remove acentos para manter consistência com outro gerador)
+    title = remove_accents(title)
+    cv2.putText(img, title, (int(width/2) - 250, margin + 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0,0,0), 4)
+
+    # Subtítulos (Estáticos para visualização)
+    cv2.putText(img, "GABARITO OFICIAL - VISUALIZACAO", (margin + 20, margin + 180), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (100,100,100), 2)
+
+    # 2. Configuração do Layout Gigante (AS MESMAS MEDIDAS)
+    num_cols = 3
+    questions_per_col = int(np.ceil(num_questions / num_cols))
+    col_width = width // num_cols
+
+    start_y_initial = margin + 350
+    v_spacing = 65
+    h_spacing = 50  # Ajustado conforme o último fix
+    bubble_radius = 22
+
+    q_num = 1
+    for c in range(num_cols):
+        start_x = (c * col_width) + margin + 10
+        for r in range(questions_per_col):
+            if q_num > num_questions: break
+
+            y = start_y_initial + (r * v_spacing)
+
+            # Número
+            cv2.putText(img, f"{q_num}.", (start_x, y+10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,0), 2)
+
+            # Pega a resposta certa para essa questão
+            resposta_certa = str(answers_dict.get(str(q_num), "")).upper().strip()
+
+            options = ["A", "B", "C", "D", "E"]
+            for i, opt in enumerate(options):
+                cx = start_x + 70 + (i * h_spacing)  # Mesma lógica do layout final
+                cy = y
+
+                # Lógica de Pintura:
+                if opt == resposta_certa:
+                    # Pinta de VERDE (BGR) se for a certa
+                    cv2.circle(img, (cx, cy), bubble_radius, (0, 200, 0), -1)  # Preenchido
+                    cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
+                else:
+                    # Bolha normal (vazia)
+                    cv2.circle(img, (cx, cy), bubble_radius, (0,0,0), 2)
+                    cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200,200,200), 1)  # Letra cinza clara
+
+            q_num += 1
+
+    # Salvar e Upload
+    unique_id = str(uuid.uuid4())
+    temp_dir = "/tmp"
+    png_path = os.path.join(temp_dir, f"preview_{unique_id}.png")
+    cv2.imwrite(png_path, img)
+
+    try:
+        png_res = cloudinary.uploader.upload(png_path, resource_type="image")
+        if os.path.exists(png_path): os.remove(png_path)
+        return png_res.get('secure_url')
+    except Exception as e:
+        print(f"Erro Cloudinary Preview: {e}")
+        return None
+

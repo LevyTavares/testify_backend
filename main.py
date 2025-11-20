@@ -10,7 +10,7 @@ import io
 import os # Para checar a existência de fontes
 import uuid # Para gerar nomes de arquivo únicos
 import json # Para converter as respostas
-from gen_gabarito import generate_and_upload_gabarito
+from gen_gabarito import generate_and_upload_gabarito, generate_gabarito_with_answers
 from grade_it import grade_gabarito_improved # Importa o corretor
 import cloudinary
 import cloudinary.uploader
@@ -155,20 +155,17 @@ async def generate_gabarito_endpoint(request_data: GabaritoRequest):
              print("Nenhuma fonte TTF encontrada nos caminhos padrão. Usando fonte default.")
 
         if request_data.respostas:
-            # Usa nova função com respostas (ignora numQuestoes se tamanho divergir)
-            img_pil = generate_gabarito_com_respostas(
-                respostas=request_data.respostas,
+            # Constrói dicionário {'1': 'A', '2': 'C', ...}
+            answers_dict = {str(i+1): (r.upper() if r else '') for i, r in enumerate(request_data.respostas)}
+            preview_url = generate_gabarito_with_answers(
+                num_questions=len(request_data.respostas),
                 title=request_data.tituloProva,
-                font_path=font_path
+                subtitle="PREVIEW",
+                answers_dict=answers_dict
             )
-
-            # Prepara a imagem para envio (mantém comportamento antigo para este caso)
-            img_io = io.BytesIO()
-            img_pil.save(img_io, 'PNG', dpi=(150, 150)) # DPI ajustado
-            img_io.seek(0)
-            print("Imagem gerada com sucesso. Enviando resposta.")
-            headers = {"Content-Disposition": 'inline; filename="gabarito.png"'}
-            return StreamingResponse(img_io, media_type="image/png", headers=headers)
+            if not preview_url:
+                raise HTTPException(status_code=500, detail="Falha ao gerar prévia do gabarito com respostas")
+            return {"preview_url": preview_url}
         else:
             # Fluxo "em branco" (Sem Respostas) usando gerador autônomo com upload
             try:
