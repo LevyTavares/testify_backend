@@ -1,3 +1,108 @@
+import google.generativeai as genai
+import os
+import json
+from PIL import Image
+
+
+def grade_gabarito_improved(image_path, expected_answers, position_data=None, debug=False):
+    """
+    Corrige a prova usando Google Gemini 1.5 Flash.
+    Ignora position_data (não precisa mais de coordenadas).
+    """
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("ERRO: GEMINI_API_KEY não encontrada nas variáveis de ambiente.")
+        return {
+            "score": 0,
+            "acertos": 0,
+            "erros": 0,
+            "total": 0,
+            "detail": "Erro de configuração do servidor (Falta API Key).",
+        }
+
+    try:
+        # 1. Configura a IA
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        # 2. Carrega a imagem
+        print("--- Iniciando análise com Gemini AI ---")
+        img = Image.open(image_path)
+
+        # 3. O Prompt Mágico
+        prompt = """
+        Analise esta imagem de um gabarito de prova.
+        Sua tarefa é identificar qual alternativa (A, B, C, D, E) foi preenchida para cada questão numérica.
+
+        Regras:
+        1. Identifique o número da questão (ex: 1, 2, 10).
+        2. Identifique a bolha preenchida (tinta preta/azul).
+        3. Se houver rasura óbvia ou marcação dupla, considere "ANULADA".
+        4. Se não houver marcação, considere "NULA".
+
+        SAÍDA OBRIGATÓRIA:
+        Retorne APENAS um objeto JSON válido, sem blocos de código markdown, neste formato exato:
+        {
+          "1": "A",
+          "2": "C",
+          "3": "E"
+        }
+        """
+
+        # 4. Envia para o Google
+        response = model.generate_content([prompt, img])
+
+        # 5. Limpeza da Resposta
+        text_response = response.text.strip()
+        # Remove crases de markdown se a IA colocar
+        if text_response.startswith("```json"):
+            text_response = text_response.replace("```json", "").replace("```", "")
+        elif text_response.startswith("```"):
+            text_response = text_response.replace("```", "")
+
+        # Converte para dicionário
+        detected_answers = json.loads(text_response)
+        print(f"IA Detectou: {detected_answers}")
+
+        # 6. Comparação (Correção)
+        acertos = 0
+        erros = 0
+        total_questoes = len(expected_answers)
+
+        # expected_answers é uma lista ["A", "B", ...] vinda do app
+        for i, gabarito_correto in enumerate(expected_answers):
+            num_questao = str(i + 1)
+            gabarito_correto = str(gabarito_correto).upper().strip()
+
+            # Pega o que a IA achou (pelo número da questão)
+            resposta_aluno = detected_answers.get(num_questao, "NULA")
+            resposta_aluno = str(resposta_aluno).upper().strip()
+
+            if resposta_aluno == gabarito_correto:
+                acertos += 1
+            else:
+                erros += 1
+
+        score = (acertos / total_questoes) * 10 if total_questoes > 0 else 0
+
+        return {
+            "score": round(score, 1),
+            "acertos": acertos,
+            "erros": erros,
+            "total": total_questoes,
+            "detail": "Correção via IA concluída com sucesso.",
+        }
+
+    except Exception as e:
+        print(f"Erro fatal na IA: {e}")
+        return {
+            "score": 0,
+            "acertos": 0,
+            "erros": 0,
+            "total": 0,
+            "detail": "Falha ao processar imagem com IA. Tente novamente.",
+        }
 import cv2
 import time
 import numpy as np
