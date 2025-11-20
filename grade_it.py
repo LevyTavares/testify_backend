@@ -22,7 +22,18 @@ def grade_gabarito_improved(image_path, expected_answers, position_data=None, de
         
         # 1. Configura a IA
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        # DEBUG: Listar modelos disponíveis para diagnosticar erro 404
+        print("--- Modelos Disponíveis nesta API Key ---")
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    print(f"Modelo: {m.name}")
+        except Exception as e:
+            print(f"Erro ao listar modelos: {e}")
+        print("---------------------------------------")
+
+        # Tenta usar o Flash (que é o ideal)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # 2. Carrega imagem
         img = Image.open(image_path)
