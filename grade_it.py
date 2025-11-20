@@ -22,7 +22,7 @@ def grade_gabarito_improved(image_path, expected_answers, position_data=None, de
         
         # 1. Configura a IA
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         # 2. Carrega imagem
         img = Image.open(image_path)
