@@ -32,8 +32,8 @@ def grade_gabarito_improved(image_path, expected_answers, position_data=None, de
             print(f"Erro ao listar modelos: {e}")
         print("---------------------------------------")
 
-        # Tenta usar o Flash (Gemini 2.5)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Tenta usar o Flash (Gemini 2.0)
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         # 2. Carrega imagem
         img = Image.open(image_path)
