@@ -3,6 +3,7 @@
 # --- IMPORTAÇÕES ESSENCIAIS ---
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from pydantic import BaseModel, Field
+from typing import List
 import os  # Para variáveis de ambiente e caminhos
 import uuid  # Para gerar nomes de arquivo únicos
 import json  # Para converter as respostas
@@ -29,61 +30,43 @@ app = FastAPI()
 class GabaritoRequest(BaseModel):
     tituloProva: str
     numQuestoes: int = Field(gt=0, description="Número total de questões")
-    respostas: list[str] | None = Field(default=None, description="Lista opcional com as respostas corretas (ex: ['B','A',...])")
+    respostas: List[str] = None
 
 # (Removido) Modelo de resposta JSON específico de streaming; agora retornamos URLs
 
 @app.post("/generate_gabarito")
 async def generate_gabarito_endpoint(request_data: GabaritoRequest):
-    try:
-        print(f"Recebido pedido para gerar gabarito: {request_data.tituloProva} ({request_data.numQuestoes} questões)")
-        # Tenta encontrar um caminho de fonte válido
-        font_path = None
-        possible_fonts = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            # Adicione outros caminhos comuns se necessário
-        ]
-        for font in possible_fonts:
-            if os.path.exists(font):
-                font_path = font
-                print(f"Usando fonte: {font_path}")
-                break
-        if not font_path:
-             print("Nenhuma fonte TTF encontrada nos caminhos padrão. Usando fonte default.")
+    print(f"Recebido pedido: {request_data.tituloProva} ({request_data.numQuestoes} questões)")
+    # VERIFICAÇÃO EXPLÍCITA SE EXISTEM RESPOSTAS
+    if request_data.respostas and len(request_data.respostas) > 0:
+        print(f"--- Gerando PREVIEW COLORIDO com {len(request_data.respostas)} respostas ---")
+        try:
+            # Transforma lista ["A", "B"] em dicionário {"1": "A", "2": "B"}
+            answers_dict = {str(i+1): resp for i, resp in enumerate(request_data.respostas)}
 
-        if request_data.respostas:
-            # Constrói dicionário {'1': 'A', '2': 'C', ...}
-            answers_dict = {str(i+1): (r.upper() if r else '') for i, r in enumerate(request_data.respostas)}
             preview_url = generate_gabarito_with_answers(
-                num_questions=len(request_data.respostas),
-                title=request_data.tituloProva,
-                subtitle="PREVIEW",
-                answers_dict=answers_dict
+                request_data.numQuestoes,
+                request_data.tituloProva,
+                "GABARITO OFICIAL",
+                answers_dict
             )
-            if not preview_url:
-                raise HTTPException(status_code=500, detail="Falha ao gerar prévia do gabarito com respostas")
+            print(f"Preview gerado: {preview_url}")
             return {"preview_url": preview_url}
-        else:
-            # Fluxo "em branco" (Sem Respostas) usando gerador autônomo com upload
-            try:
-                image_url, map_url = generate_and_upload_gabarito(
-                    request_data.numQuestoes,
-                    request_data.tituloProva,
-                    "Nome: __________________ Data: ___/___/___",
-                )
-                return {"image_path": image_url, "map_path": map_url}
-            except HTTPException as e:
-                raise e
-            except Exception as e:
-                print(e)
-                raise HTTPException(
-                    status_code=500, detail="Falha ao processar gabarito em branco"
-                )
-    except Exception as e:
-        print(f"Erro no servidor ao gerar imagem: {e}")
-        # Retorna um erro HTTP 500 detalhado
-        raise HTTPException(status_code=500, detail=f"Erro interno ao gerar imagem: {str(e)}")
+        except Exception as e:
+            print(f"Erro ao gerar preview: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    else:
+        print("--- Gerando GABARITO EM BRANCO para impressão ---")
+        try:
+            image_url, map_url = generate_and_upload_gabarito(
+                request_data.numQuestoes,
+                request_data.tituloProva,
+                "Nome: ________________________________________"
+            )
+            return {"image_path": image_url, "map_path": map_url}
+        except Exception as e:
+            print(f"Erro ao gerar gabarito em branco: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint raiz para teste
 @app.get("/")
