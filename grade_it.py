@@ -38,16 +38,29 @@ def grade_gabarito_improved(image_path, expected_answers, position_data=None, de
         # 2. Carrega imagem
         img = Image.open(image_path)
         
-        # 3. Prompt
+        # 3. O Prompt Mágico (Ajustado para ignorar letras impressas)
         prompt = """
-        Aja como um corretor de gabaritos. Analise a imagem.
-        Identifique a alternativa preenchida (A, B, C, D, E) para cada questão numérica.
-        Ignore sombras. Se houver rasura, considere ANULADA.
+        Aja como um sistema de correção óptica rigoroso. Analise a imagem deste gabarito.
+        Sua missão é identificar qual alternativa (A, B, C, D, E) foi REALMENTE PREENCHIDA pelo aluno.
+        
+        REGRAS VISUAIS CRÍTICAS:
+        1. DIFERENCIE TINTA DE IMPRESSÃO:
+           - Uma bolha VAZIA tem a letra (A, B, C...) impressa dentro com traço fino. ISSO NÃO É MARCAÇÃO.
+           - Uma bolha MARCADA tem uma mancha de tinta escura (caneta) cobrindo a letra ou preenchendo o círculo.
+        
+        2. IGNORE SOMBRAS:
+           - Se a imagem for foto de tela (monitor), ignore o padrão de pixels (moiré). Busque a marcação sólida.
+        
+        3. SAÍDA:
+           - Identifique o número da questão.
+           - Retorne a letra da bolha que tem TINTA DE CANETA.
+           - Se houver dúvida, escolha a mais preenchida.
         
         RETORNE APENAS JSON:
         {
           "1": "A",
-          "2": "C"
+          "2": "C",
+          "3": "E"
         }
         """
         
