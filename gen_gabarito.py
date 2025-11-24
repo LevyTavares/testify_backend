@@ -58,7 +58,7 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
 
     # Ajustes de espaçamento para caber as bolhas grandes
     start_y_initial = margin + 350
-    v_spacing = 65  # Espaço vertical entre linhas
+    v_spacing = 85  # Espaço vertical aumentado para acomodar letras acima
     h_spacing = 50  # Espaço horizontal entre bolhas (compactado para compensar deslocamento)
     bubble_radius = 22
 
@@ -84,10 +84,10 @@ def generate_and_upload_gabarito(num_questions, title, subtitle):
                 cx = start_x + 70 + (i * h_spacing)
                 cy = y
 
-                # Bolha Grande
+                # Bolha somente contorno (estilo ENEM)
                 cv2.circle(img, (cx, cy), bubble_radius, (0,0,0), 2)
-                # Letra (Cinza claro e fino para não confundir com marcação)
-                cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200,200,200), 1)
+                # Letra acima da bolha (preta, menor)
+                cv2.putText(img, opt, (cx-12, cy-35), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
                 # Salvar posição central
                 position_data[str(q_num)][opt] = (cx, cy)
@@ -145,7 +145,7 @@ def generate_gabarito_with_answers(num_questions, title, subtitle, answers_dict)
     col_width = width // num_cols
 
     start_y_initial = margin + 350
-    v_spacing = 65
+    v_spacing = 85
     h_spacing = 50  # Ajustado conforme o último fix
     bubble_radius = 22
 
@@ -170,13 +170,13 @@ def generate_gabarito_with_answers(num_questions, title, subtitle, answers_dict)
 
                 # Lógica de Pintura:
                 if opt == resposta_certa:
-                    # Pinta de VERDE (BGR) se for a certa
-                    cv2.circle(img, (cx, cy), bubble_radius, (0, 200, 0), -1)  # Preenchido
-                    cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
+                    # Bolha preenchida para resposta correta (verde), sem letra dentro
+                    cv2.circle(img, (cx, cy), bubble_radius, (0, 200, 0), -1)
                 else:
-                    # Bolha normal (vazia)
+                    # Bolha somente contorno
                     cv2.circle(img, (cx, cy), bubble_radius, (0,0,0), 2)
-                    cv2.putText(img, opt, (cx-10, cy+10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200,200,200), 1)  # Letra cinza clara
+                # Letra acima (igual em todas, preta e menor)
+                cv2.putText(img, opt, (cx-12, cy-35), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
             q_num += 1
 
