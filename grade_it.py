@@ -1,7 +1,7 @@
 import google.generativeai as genai
 import os
 import json
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 # Função dummy para compatibilidade (caso o main tente chamar)
 def detect_corner_anchors(image):
@@ -37,6 +37,28 @@ def grade_gabarito_improved(image_path, expected_answers, position_data=None, de
         
         # 2. Carrega imagem
         img = Image.open(image_path)
+        # --- 🔍 PRÉ-PROCESSAMENTO DE IMAGEM (TURBO) ---
+        # 1. Aumenta o contraste drasticamente (separa tinta do papel)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(2.0)  # Fator 2.0 dobra o contraste
+
+        # 2. Aumenta a nitidez (ajuda a definir as bordas das bolhas)
+        enhancer_sharp = ImageEnhance.Sharpness(img)
+        img = enhancer_sharp.enhance(1.5)
+        
+        # Salva um log visual (opcional, apenas para debug se quiser ver o resultado)
+        # img.save("debug_enhanced.jpg")
+
+        # --- 📉 OTIMIZAÇÃO DE TAMANHO ---
+        # Redimensionar para largura máxima de 1080px (Full HD) mantendo a proporção.
+        # Isso deixa o upload instantâneo e ajuda a IA a focar no padrão global.
+        base_width = 1080
+        if img.width > base_width:
+            w_percent = (base_width / float(img.width))
+            h_size = int((float(img.height) * float(w_percent)))
+            # Usa LANCZOS para reduzir com alta qualidade
+            img = img.resize((base_width, h_size), Image.Resampling.LANCZOS)
+            print(f"Imagem otimizada para: {img.size}")
         
         # 3. O Prompt Mágico (Ajustado para ignorar letras impressas)
         prompt = """
